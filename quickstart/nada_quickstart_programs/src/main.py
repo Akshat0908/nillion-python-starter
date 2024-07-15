@@ -1,53 +1,69 @@
 from nada_dsl import *
 
-def nada_main():
-    party1 = Party(name="Party1")
-    my_int1 = SecretInteger(Input(name="my_int1", party=party1))
-    my_int2 = SecretInteger(Input(name="my_int2", party=party1))
-
-    # Basic arithmetic operations
-    sum_result = my_int1 + my_int2
-    product_result = my_int1 * my_int2
-    difference_result = my_int1 - my_int2
-    quotient_result = my_int1 / my_int2
-
-    # Conditional logic
-    max_result = (my_int1 < my_int2).if_else(my_int2, my_int1)
-
-    # A custom function using the @nada_fn decorator
-    @nada_fn
-    def custom_operation(a: SecretInteger, b: SecretInteger) -> SecretInteger:
-        return (a + b) * (a - b)
-
-    custom_result = custom_operation(my_int1, my_int2)
-
-    # Function to calculate the square of a number
-    @nada_fn
-    def square(a: SecretInteger) -> SecretInteger:
-        return a * a
-
-    square_result1 = square(my_int1)
-    square_result2 = square(my_int2)
-
-    # Function to compute the maximum of three numbers
-    @nada_fn
-    def max_of_three(a: SecretInteger, b: SecretInteger, c: SecretInteger) -> SecretInteger:
-        return (a < b).if_else(
-            (b < c).if_else(c, b),
-            (a < c).if_else(c, a)
-        )
-
-    max_of_three_result = max_of_three(my_int1, my_int2, square_result1)
-
-    # Return all results as outputs
+def initialize_parties():
     return [
-        Output(sum_result, "sum_output", party1),
-        Output(product_result, "product_output", party1),
-        Output(difference_result, "difference_output", party1),
-        Output(quotient_result, "quotient_output", party1),
-        Output(max_result, "max_output", party1),
-        Output(custom_result, "custom_output", party1),
-        Output(square_result1, "square_output1", party1),
-        Output(square_result2, "square_output2", party1),
-        Output(max_of_three_result, "max_of_three_output", party1)
+        Party(name="Auctioneer"),
+        Party(name="Bidder1"),
+        Party(name="Bidder2"),
+        Party(name="Bidder3")
     ]
+
+def initialize_items(nr_items):
+    items = []
+    for i in range(nr_items):
+        items.append(Party(name="Item" + str(i)))
+    return items
+
+def initialize_bids(nr_bidders, nr_items, bidders, items):
+    bids_per_item = []
+    for item in items:
+        bids_per_item.append([])
+        for bidder in bidders:
+            bids_per_item[-1].append(
+                SecretUnsignedInteger(
+                    Input(name="bid_" + bidder.name + "_" + item.name, party=bidder)
+                )
+            )
+    return bids_per_item
+
+def record_bids_on_blockchain(bids_per_item, items):
+    blockchain_records = []
+    for item_idx, item in enumerate(items):
+        for bidder_idx, bidder_bids in enumerate(bids_per_item[item_idx]):
+            blockchain_records.append(
+                Output(bidder_bids, "bid_" + item.name + "_by_" + str(bidder_idx), item)
+            )
+    return blockchain_records
+
+def determine_winner(nr_bidders, nr_items, bids_per_item, bidders, items):
+    winners = []
+    for item_idx in range(nr_items):
+        highest_bid = bids_per_item[item_idx][0]
+        winner = bidders[0]
+        for bidder_idx in range(1, nr_bidders):
+            if bids_per_item[item_idx][bidder_idx] > highest_bid:
+                highest_bid = bids_per_item[item_idx][bidder_idx]
+                winner = bidders[bidder_idx]
+        winners.append(Output(highest_bid, "winning_bid_" + items[item_idx].name, winner))
+    return winners
+
+def nada_main():
+    nr_bidders = 3
+    nr_items = 2
+
+    parties = initialize_parties()
+    auctioneer = parties[0]
+    bidders = parties[1:]
+
+    items = initialize_items(nr_items)
+
+    bids_per_item = initialize_bids(nr_bidders, nr_items, bidders, items)
+
+    blockchain_records = record_bids_on_blockchain(bids_per_item, items)
+
+    winners = determine_winner(nr_bidders, nr_items, bids_per_item, bidders, items)
+
+    return winners + blockchain_records
+
+if __name__ == "__main__":
+    nada_main()
